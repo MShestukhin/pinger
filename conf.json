@@ -1,0 +1,21 @@
+{
+	"logPath" : "/home/maxim/Documents/pinger",
+	"groups" : [
+		{
+			"ip" : ["77.88.8.1", "8.8.8.8"],
+			"delay": 1,
+			"num_allowed_conn_in_time": 10,
+			"time_allowed_conn_for_num": 3600,
+			"count_pac": 10,
+			"script": "/home/maxim/Documents/pinger/replica_script.sh"
+		},
+		{
+			"ip" : ["77.88.8.8", "8.8.8.8"],
+			"delay": 1,
+			"num_allowed_conn_in_time": 10,
+			"time_allowed_conn_for_num": 3600,
+			"count_pac": 10,
+			"script": "/home/maxim/Documents/pinger/replica_script.sh"
+		}
+	]
+}
