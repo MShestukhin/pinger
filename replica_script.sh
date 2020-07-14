@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
-if [ "$1" = true && "$2" = true]; then
-     ln -sft ./replica_fallback.conf /opt/svyazcom/etc/replica.conf
+IFS=, read -a ip <<< $1
+if "${ip[0]}" = true && "${ip[1]}" = true; then
+	echo "All serv"
   else
-    ln -sft ./replica_backup.conf /opt/svyazcom/etc/replica.conf
+	echo "Not All serv"
 fi

@@ -7,6 +7,7 @@
 			"num_allowed_conn_in_time": 10,
 			"time_allowed_conn_for_num": 3600,
 			"count_pac": 10,
+			"count_pac_to_reconect": 50,
 			"script": "/home/maxim/Documents/pinger/replica_script.sh"
 		},
 		{
@@ -15,6 +16,7 @@
 			"num_allowed_conn_in_time": 10,
 			"time_allowed_conn_for_num": 3600,
 			"count_pac": 10,
+			"count_pac_to_reconect": 50,
 			"script": "/home/maxim/Documents/pinger/replica_script.sh"
 		}
 	]
