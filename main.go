@@ -6,9 +6,11 @@ import (
 	"os"
 	"os/exec"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/op/go-logging"
+	"github.com/sparrc/go-ping"
 )
 
 var log = logging.MustGetLogger("example")
@@ -89,47 +91,77 @@ func change_state(changer_list *Changer_list) {
 	}
 }
 
-var start = true
+func new_ping(ip string, changer_list *Changer_list, grp Group, ch chan bool, mutex sync.Mutex) {
+	pinger, err := ping.NewPinger(ip)
+	if err != nil {
+		panic(err)
+	}
+	pinger.Count = grp.Count
+	pinger.Run() // blocks until finished
+	stats := pinger.Statistics() // get send/receive/rtt stats
+	fmt.Printf("\n--- %s ping statistics ---\n", stats.Addr)
+	fmt.Printf("%d packets transmitted, %d packets received, %v%% packet loss\n",
+		stats.PacketsSent, stats.PacketsRecv, stats.PacketLoss)
+	fmt.Printf("round-trip min/avg/max/stddev = %v/%v/%v/%v\n",
+		stats.MinRtt, stats.AvgRtt, stats.MaxRtt, stats.StdDevRtt)
+}
+
+func my_ping(ip string, changer_list *Changer_list, grp Group, ch chan bool, mutex sync.Mutex) {
+	var out1 []byte
+	change_status := false
+	changer :=changer_list.changer_curent
+	if changer.Ip[ip] == true {
+		out1, _ = exec.Command("ping", ip, fmt.Sprintf("-c %d", grp.Count)).Output()
+	} else {
+		out1, _ = exec.Command("ping", ip, fmt.Sprintf("-c %d", grp.Count_to_reconnect)).Output()
+	}
+	if strings.Contains(string(out1), "100% packet loss") ||
+		strings.Contains(string(out1), "Destination Host Unreachable") ||
+		strings.Contains(string(out1), "Network is unreachable") ||
+		len(out1) == 0 {
+		if changer.Ip[ip] {
+			mutex.Lock()
+			changer_list.changer_prev.Ip[ip] = changer.Ip[ip]
+			changer.Ip[ip] = false
+			mutex.Unlock()
+			change_status = true
+			// change_state(changer_list)
+		}
+	} else {
+		if !changer.Ip[ip] {
+			mutex.Lock()
+			changer_list.changer_prev.Ip[ip] = changer.Ip[ip]
+			changer.Ip[ip] = true
+			mutex.Unlock()
+			change_status = true
+			// change_state(changer_list)
+		}
+	}
+	//log.Info("PING ", ip, " recv ", len(out1))
+	if changer.Start {
+		// change_state(changer_list)
+		changer.Start = false
+		change_status = true
+	}
+	ch <- change_status
+}
 
 func new_start_ping(changer_list *Changer_list, grp Group, c chan int) {
-	changer := changer_list.changer_curent
+	//changer := changer_list.changer_curent
 	for true {
 		time.Sleep(time.Duration(grp.Delay) * time.Second)
-		change_status := false
+		ch := make(chan bool)
+		var mutex sync.Mutex
 		for _, ip := range grp.Ip {
-			var out1 []byte
-			if changer.Ip[ip] == true {
-				out1, _ = exec.Command("ping", ip, fmt.Sprintf("-c %d", grp.Count)).Output()
-			} else {
-				out1, _ = exec.Command("ping", ip, fmt.Sprintf("-c %d", grp.Count_to_reconnect)).Output()
-			}
-			if strings.Contains(string(out1), "100% packet loss") ||
-				strings.Contains(string(out1), "Destination Host Unreachable") ||
-				strings.Contains(string(out1), "Network is unreachable") ||
-				len(out1) == 0 {
-				if changer.Ip[ip] {
-					changer_list.changer_prev.Ip[ip] = changer.Ip[ip]
-					changer.Ip[ip] = false
-					change_status = true
-					// change_state(changer_list)
-				}
-			} else {
-				if !changer.Ip[ip] {
-					changer_list.changer_prev.Ip[ip] = changer.Ip[ip]
-					changer.Ip[ip] = true
-					change_status = true
-					// change_state(changer_list)
-				}
-			}
-			log.Info("PING ", ip, " recv ", len(out1))
-			if changer.Start {
-				// change_state(changer_list)
-				change_status = true
-				changer.Start = false
-			}
+			//go my_ping(ip, changer_list, grp,ch,mutex)
+			go new_ping(ip, changer_list, grp,ch,mutex)
 		}
-		if change_status {
-			change_state(changer_list)
+		for _, ip := range grp.Ip {
+			change_status := <-ch
+			if change_status {
+				log.Notice("Change ",ip)
+				change_state(changer_list)
+			}
 		}
 	}
 }
@@ -147,7 +179,7 @@ func main() {
 		fmt.Println("Please enter the name of the configuration file")
 		fmt.Println("Example : pinger *.conf")
 	}
-	file, err1 := os.Open("conf.json")
+	file, err1 := os.Open(config_file_name)
 	if err1 != nil {
 		log.Error("Error open configuration file!")
 	}
