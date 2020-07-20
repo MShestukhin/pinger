@@ -7,7 +7,8 @@ import (
 	"os/exec"
 	"sync"
 	"time"
-
+	"net"
+	"bufio"
 	"github.com/op/go-logging"
 	"github.com/sparrc/go-ping"
 )
@@ -95,6 +96,7 @@ func change_state(changer_list *Changer_list, grp Group) {
 			changer.may_i_change = false
 		}
 	} else {
+		mutex.Lock()
 		var statuses_str string
 		ind := 1
 		sum_ips := len(changer.Ip_result)
@@ -185,7 +187,6 @@ func change_state(changer_list *Changer_list, grp Group) {
 		var out1 []byte
 		if changer.current_statuses != statuses_str && can_run_script {
 			out1, _ = exec.Command(changer.Script, statuses_str).Output()
-			mutex.Lock()
 			log.Info(changer.Script, statuses_str)
 			log.Info(changer.Ip_current_level, fmt.Sprintf("Number of possible triggers %d !", changer.Max_num_change))
 			log.Info(changer.Ip_current_level, fmt.Sprintf("Number of triggers %d !", changer.Num_change))
@@ -196,8 +197,8 @@ func change_state(changer_list *Changer_list, grp Group) {
 			}
 			changer.Num_change++
 			changer.current_statuses = statuses_str
-			mutex.Unlock()
 		}
+		mutex.Unlock()
 	}
 }
 
@@ -234,25 +235,27 @@ func new_ping(pinger *ping.Pinger, ip string, changer_list *Changer_list, grp Gr
 		changer.Ip_result[stats.Addr] = append(changer.Ip_result[stats.Addr], 1)
 		mutex.Unlock()
 		//changer_list.changer_curent.num_recv_pac[stats.Addr] = float64(stats.PacketsRecv)
-		recv_pac := 0
-		for _, pinger_from := range changer_list.changer_curent.pingers {
-			if pinger_from.Addr() != pinger.Addr() {
-				if pinger_from.PacketsRecv > pinger.PacketsRecv {
-					recv_pac = pinger_from.PacketsRecv - pinger.PacketsRecv
-				}
-				if pinger_from.PacketsRecv < pinger.PacketsRecv {
-					recv_pac = pinger.PacketsRecv - pinger_from.PacketsRecv
-				}
-				if recv_pac > 3 {
-					changer_list.changer_curent.Ip_result[pinger_from.Addr()] = append(changer_list.changer_curent.Ip_result[pinger_from.Addr()], 0)
-					if len(changer_list.changer_curent.Ip_result[pinger_from.Addr()]) >= grp.Len_buff_for_analise_pac {
-						mutex.Lock()
-						changer_list.changer_curent.Ip_result[pinger_from.Addr()] = append(changer_list.changer_curent.Ip_result[pinger_from.Addr()][:0], changer_list.changer_curent.Ip_result[pinger_from.Addr()][1:]...)
-						mutex.Unlock()
-					}
-				}
-			}
-		}
+		//recv_pac := 0
+		//for _, pinger_from := range changer_list.changer_curent.pingers {
+		//	if pinger_from.Addr() != pinger.Addr() {
+		//		if pinger_from.PacketsRecv > pinger.PacketsRecv {
+		//			recv_pac = pinger_from.PacketsRecv - pinger.PacketsRecv
+		//		}
+		//		if pinger_from.PacketsRecv < pinger.PacketsRecv {
+		//			recv_pac = pinger.PacketsRecv - pinger_from.PacketsRecv
+		//		}
+		//		if recv_pac > 3 {
+		//			mutex.Lock()
+		//			changer_list.changer_curent.Ip_result[pinger_from.Addr()] = append(changer_list.changer_curent.Ip_result[pinger_from.Addr()], 0)
+		//			mutex.Unlock()
+		//			if len(changer_list.changer_curent.Ip_result[pinger_from.Addr()]) >= grp.Len_buff_for_analise_pac {
+		//				mutex.Lock()
+		//				changer_list.changer_curent.Ip_result[pinger_from.Addr()] = append(changer_list.changer_curent.Ip_result[pinger_from.Addr()][:0], changer_list.changer_curent.Ip_result[pinger_from.Addr()][1:]...)
+		//				mutex.Unlock()
+		//			}
+		//		}
+		//	}
+		//}
 		// массив введения статистики типа 127.0.0.1[0,1,1,1,1,1,1,1,1,1,1]
 		// ограничен числом заданным в конфиге и находится в grp.Len_buff_for_analise_pac
 		if len(changer.Ip_result[stats.Addr]) >= grp.Len_buff_for_analise_pac {
@@ -352,10 +355,12 @@ func main() {
 	//-----------------------------------------------------------------------------
 	//start main logic
 	c := make(chan int)
+	groups := [] *Changer{}
 	// вытаскиваем по группе
 	for _, group := range configuration.Groups {
 		change_list := new(Changer_list) //устарело нужно удалить
 		change := new(Changer)           // делаю наблюдателя
+		groups = append(groups,change)
 		change_list.changer_curent = change
 		change.Script = group.Script // задаю скрипт для группы
 		change.may_i_change = true
@@ -405,10 +410,22 @@ func main() {
 				change.may_i_change = true
 			}
 		}()
-		// запускаю в потоке пинги ip которые находятся в конфигурационном файле
-		// например пингую одновременно ["127.0.0.1", "8.8.8.8"]
 		go new_start_ping(change_list, group, c)
 	}
+	// например пингую одновременно ["127.0.0.1", "8.8.8.8"]
+	// запускаю в потоке пинги ip которые находятся в конфигурационном файле
+	go func() {
+		ln, _ := net.Listen("tcp", ":8081")
+		conn, _ := ln.Accept()
+		for true {
+			//time.Sleep(time.Second)
+			group_num, _ := bufio.NewReader(conn).ReadString('\n')
+			fmt.Print("Enter please num of group : ")
+			//if int(group_num) <= len(groups) && int(group_num) !=0 {
+			//	fmt.Println(time.Now().Format("Mon Jan _2 15:04:05 2006"),groups[group_num-1].Ip_current_level)
+			//}
+		}
+	}()
 	// так как каждая группа анализируется в потоке, цикл перехватывает возможные ошибки работы в потоках
 	for index, _ := range configuration.Groups {
 		err := <-c
