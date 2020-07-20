@@ -18,17 +18,17 @@ var format = logging.MustStringFormatter(
 )
 
 type Changer struct {
-	Ip_current_level map[string]int
-	Ip_result       map[string][]int
-	pingers       map[string] *ping.Pinger
-	Ip_level_statistic       map[string][]int
-	Script         string
-	Max_num_change int
-	Num_change     int
-	Start          bool
-	num_recv_pac   map[string]time.Duration
-	current_statuses string
-	may_i_change bool
+	Ip_current_level   map[string]int
+	Ip_result          map[string][]int
+	pingers            map[string]*ping.Pinger
+	Ip_level_statistic map[string][]int
+	Script             string
+	Max_num_change     int
+	Num_change         int
+	Start              bool
+	num_recv_pac       map[string]time.Duration
+	current_statuses   string
+	may_i_change       bool
 }
 
 type Changer_list struct {
@@ -54,42 +54,42 @@ type Configuration struct {
 
 var mutex sync.Mutex
 
-func get_level(ips[]int) int  {
+func get_level(ips []int) int {
 	hund_perc := len(ips)
-	num_connect :=0
+	num_connect := 0
 	for _, value := range ips {
 		if value == 1 {
-			num_connect ++
+			num_connect++
 		}
 	}
-	percent := (num_connect *100)/hund_perc
+	percent := (num_connect * 100) / hund_perc
 	level := 0
 	switch {
 	case percent <= 100 && percent >= 80:
 		level = 5
-		break;
+		break
 	case percent < 80 && percent >= 60:
 		level = 4
-		break;
+		break
 	case percent < 60 && percent >= 40:
 		level = 3
-		break;
+		break
 	case percent < 40 && percent >= 20:
 		level = 2
-		break;
+		break
 	case percent < 20 && percent > 0:
 		level = 1
-		break;
+		break
 	case percent == 0:
 		level = 0
-		break;
+		break
 	}
 	return level
 }
 
 func change_state(changer_list *Changer_list, grp Group) {
 	changer := changer_list.changer_curent
-	if changer.Num_change >= changer.Max_num_change{
+	if changer.Num_change >= changer.Max_num_change {
 		if changer.may_i_change {
 			log.Warning(fmt.Sprintf("The limit of possible triggers is increased %d !", changer.Max_num_change))
 			changer.may_i_change = false
@@ -99,7 +99,7 @@ func change_state(changer_list *Changer_list, grp Group) {
 		ind := 1
 		sum_ips := len(changer.Ip_result)
 		can_run_script := true
-		for  _, key := range grp.Ip {
+		for _, key := range grp.Ip {
 			ips := changer.Ip_result[key]
 			level := get_level(ips)
 
@@ -107,7 +107,9 @@ func change_state(changer_list *Changer_list, grp Group) {
 				can_change := true
 				vector_last := ips[len(ips)-grp.Count_to_reconnect : len(ips)]
 				for _, ping_res := range vector_last {
-					if ping_res == 0 { can_change = false }
+					if ping_res == 0 {
+						can_change = false
+					}
 				}
 
 				sum := 0
@@ -117,7 +119,9 @@ func change_state(changer_list *Changer_list, grp Group) {
 
 				if len(changer.Ip_level_statistic) >= grp.Count {
 					for _, ping_res := range changer.Ip_level_statistic[key] {
-						if ping_res != 5 { can_change = false }
+						if ping_res != 5 {
+							can_change = false
+						}
 					}
 				}
 
@@ -127,14 +131,16 @@ func change_state(changer_list *Changer_list, grp Group) {
 					log.Info("At the moment the channel has the highest bandwidth ", key)
 					level = 5
 					changer_list.changer_curent.Ip_result[key] = nil
-					changer_list.changer_curent.Ip_result[key] = [] int{1}
+					changer_list.changer_curent.Ip_result[key] = []int{1}
 				}
 			}
 			if level != 5 && len(ips) >= grp.Count {
 				can_change := true
 				vector_last := ips[len(ips)-grp.Count : len(ips)]
 				for _, ping_res := range vector_last {
-					if ping_res == 1 { can_change = false }
+					if ping_res == 1 {
+						can_change = false
+					}
 				}
 
 				sum := 0
@@ -147,7 +153,7 @@ func change_state(changer_list *Changer_list, grp Group) {
 					log.Error("The channel is not available ", key)
 					level = 0
 					changer_list.changer_curent.Ip_result[key] = nil
-					changer_list.changer_curent.Ip_result[key] = [] int{0}
+					changer_list.changer_curent.Ip_result[key] = []int{0}
 				}
 			}
 			if level != 5 && level != 0 {
@@ -181,8 +187,8 @@ func change_state(changer_list *Changer_list, grp Group) {
 			out1, _ = exec.Command(changer.Script, statuses_str).Output()
 			mutex.Lock()
 			log.Info(changer.Script, statuses_str)
-			log.Info( changer.Ip_current_level, fmt.Sprintf("Number of possible triggers %d !", changer.Max_num_change))
-			log.Info( changer.Ip_current_level, fmt.Sprintf("Number of triggers %d !", changer.Num_change))
+			log.Info(changer.Ip_current_level, fmt.Sprintf("Number of possible triggers %d !", changer.Max_num_change))
+			log.Info(changer.Ip_current_level, fmt.Sprintf("Number of triggers %d !", changer.Num_change))
 			if len(out1) != 0 {
 				log.Info(string(out1))
 			} else {
@@ -195,12 +201,12 @@ func change_state(changer_list *Changer_list, grp Group) {
 	}
 }
 
-func statistic(pinger *ping.Pinger, changer_list *Changer_list, grp Group){
+func statistic(pinger *ping.Pinger, changer_list *Changer_list, grp Group) {
 	stats := pinger.Statistics()
 	changer := changer_list.changer_curent
 	//changer_list.changer_curent.num_recv_pac[stats.Addr] - хранит число вернувшихся пакетов за предыдущий срез статистики
 	//если пакеты приходят то добавляю единицу, если нет, то заношу 0
-	if stats.AvgRtt == changer.num_recv_pac[stats.Addr]  {
+	if stats.AvgRtt == changer.num_recv_pac[stats.Addr] {
 		mutex.Lock()
 		changer.Ip_result[stats.Addr] = append(changer.Ip_result[stats.Addr], 0)
 		mutex.Unlock()
@@ -229,8 +235,8 @@ func new_ping(pinger *ping.Pinger, ip string, changer_list *Changer_list, grp Gr
 		mutex.Unlock()
 		//changer_list.changer_curent.num_recv_pac[stats.Addr] = float64(stats.PacketsRecv)
 		recv_pac := 0
-		for _,pinger_from := range changer_list.changer_curent.pingers{
-			if pinger_from.Addr() != pinger.Addr(){
+		for _, pinger_from := range changer_list.changer_curent.pingers {
+			if pinger_from.Addr() != pinger.Addr() {
 				if pinger_from.PacketsRecv > pinger.PacketsRecv {
 					recv_pac = pinger_from.PacketsRecv - pinger.PacketsRecv
 				}
@@ -275,7 +281,7 @@ func new_ping(pinger *ping.Pinger, ip string, changer_list *Changer_list, grp Gr
 
 func new_start_ping(changer_list *Changer_list, grp Group, c chan int) {
 	// создаю пингер
-	pingers := [] *ping.Pinger{}
+	pingers := []*ping.Pinger{}
 	for _, ip := range grp.Ip {
 		// передаю пингеру ip из группы из конфигурационного файла
 		pinger, err := ping.NewPinger(ip)
@@ -283,7 +289,8 @@ func new_start_ping(changer_list *Changer_list, grp Group, c chan int) {
 			panic(err)
 		}
 		changer_list.changer_curent.pingers[ip] = pinger
-		pingers = append(pingers,pinger)
+		pingers = append(pingers, pinger)
+		pinger.SetPrivileged(true)
 		// начинаю пинговать ip взятый из грруппы из конфигурационного файла в потоке
 		go new_ping(pinger, ip, changer_list, grp)
 	}
@@ -296,7 +303,7 @@ func new_start_ping(changer_list *Changer_list, grp Group, c chan int) {
 		// если ping для какого либо ip из группы не возвращается то в статистике задаётся ноль,
 		// таким образом в цикле могу определить что канал не доступен
 		for _, pinger := range pingers {
-			statistic(pinger,changer_list,grp)
+			statistic(pinger, changer_list, grp)
 		}
 		change_state(changer_list, grp)
 	}
@@ -331,12 +338,12 @@ func main() {
 	today := time.Now()
 	file_log, err := os.OpenFile(configuration.Log_path+"/"+today.Format("2006.01.02")+".log", os.O_RDWR|os.O_CREATE|os.O_APPEND, 0666)
 	if err != nil {
-		fmt.Println("Unable to open the log file :",err.Error())
+		fmt.Println("Unable to open the log file :", err.Error())
 		os.Exit(1)
 	}
 	defer file_log.Close()
-	backend1 := logging.NewLogBackend(os.Stderr, "", 0)
-	backend2 := logging.NewLogBackend(os.Stderr, "", 0)
+	backend1 := logging.NewLogBackend(file_log, "", 0)
+	backend2 := logging.NewLogBackend(file_log, "", 0)
 	backend2Formatter := logging.NewBackendFormatter(backend2, format)
 	backend1Leveled := logging.AddModuleLevel(backend1)
 	backend1Leveled.SetLevel(logging.ERROR, "")
@@ -348,7 +355,7 @@ func main() {
 	// вытаскиваем по группе
 	for _, group := range configuration.Groups {
 		change_list := new(Changer_list) //устарело нужно удалить
-		change := new(Changer) // делаю наблюдателя
+		change := new(Changer)           // делаю наблюдателя
 		change_list.changer_curent = change
 		change.Script = group.Script // задаю скрипт для группы
 		change.may_i_change = true
@@ -381,14 +388,14 @@ func main() {
 		for _, ip := range group.Ip {
 			// инициализирую массив для карты строкой выше 363стр
 			//тип например [127.0.0.1:[0,1,0,1,1,1,1,1,1,1,1,1]]
-			change.Ip_result[ip] = [] int{}
+			change.Ip_result[ip] = []int{}
 			// инициализирую массив для карты строкой выше 372стр
 			// по типу [127.0.0.1:[4,3,2,0,2,5]]
-			change.Ip_level_statistic[ip] = [] int{}
+			change.Ip_level_statistic[ip] = []int{}
 			// считаю что канал не доступен [127.0.0.1:[0]]
-			change.Ip_level_statistic[ip] = append(change.Ip_level_statistic[ip],0)
+			change.Ip_level_statistic[ip] = append(change.Ip_level_statistic[ip], 0)
 			// заполняю масив нулём [127.0.0.1:[0]]
-			change.Ip_result[ip] = append(change.Ip_result[ip],0)
+			change.Ip_result[ip] = append(change.Ip_result[ip], 0)
 		}
 		// запускаю таймер по истичению которого обнуляю число возможных запусков скрипта
 		go func() {
