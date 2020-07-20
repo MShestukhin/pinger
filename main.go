@@ -284,6 +284,7 @@ func new_start_ping(changer_list *Changer_list, grp Group, c chan int) {
 		}
 		changer_list.changer_curent.pingers[ip] = pinger
 		pingers = append(pingers,pinger)
+		pinger.SetPrivileged(true)
 		// начинаю пинговать ip взятый из грруппы из конфигурационного файла в потоке
 		go new_ping(pinger, ip, changer_list, grp)
 	}
@@ -335,8 +336,8 @@ func main() {
 		os.Exit(1)
 	}
 	defer file_log.Close()
-	backend1 := logging.NewLogBackend(os.Stderr, "", 0)
-	backend2 := logging.NewLogBackend(os.Stderr, "", 0)
+	backend1 := logging.NewLogBackend(file_log, "", 0)
+	backend2 := logging.NewLogBackend(file_log, "", 0)
 	backend2Formatter := logging.NewBackendFormatter(backend2, format)
 	backend1Leveled := logging.AddModuleLevel(backend1)
 	backend1Leveled.SetLevel(logging.ERROR, "")
