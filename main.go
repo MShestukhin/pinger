@@ -5,6 +5,9 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"regexp"
+	"strconv"
+	"strings"
 	"sync"
 	"time"
 	"net"
@@ -91,10 +94,7 @@ func get_level(ips []int) int {
 func change_state(changer_list *Changer_list, grp Group) {
 	changer := changer_list.changer_curent
 	if changer.Num_change >= changer.Max_num_change {
-		if changer.may_i_change {
 			log.Warning(fmt.Sprintf("The limit of possible triggers is increased %d !", changer.Max_num_change))
-			changer.may_i_change = false
-		}
 	} else {
 		mutex.Lock()
 		var statuses_str string
@@ -275,6 +275,7 @@ func new_ping(pinger *ping.Pinger, ip string, changer_list *Changer_list, grp Gr
 			stats.PacketsSent, stats.PacketsRecv, stats.PacketLoss))
 		log.Warning(fmt.Sprintf("round-trip min/avg/max/stddev = %v/%v/%v/%v\n",
 			stats.MinRtt, stats.AvgRtt, stats.MaxRtt, stats.StdDevRtt))
+		os.Exit(1)
 	}
 
 	log.Info(fmt.Sprintf("PING %s (%s):\n", pinger.Addr(), pinger.IPAddr()))
@@ -415,15 +416,37 @@ func main() {
 	// например пингую одновременно ["127.0.0.1", "8.8.8.8"]
 	// запускаю в потоке пинги ip которые находятся в конфигурационном файле
 	go func() {
-		ln, _ := net.Listen("tcp", ":8081")
-		conn, _ := ln.Accept()
+		ln, err := net.Listen("tcp", ":54505")
+		if err != nil {
+			fmt.Println(err)
+		}
 		for true {
+			conn, _ := ln.Accept()
 			//time.Sleep(time.Second)
+			conn.Write([]byte("Enter please group num : "))
 			group_num, _ := bufio.NewReader(conn).ReadString('\n')
-			fmt.Print("Enter please num of group : ")
-			//if int(group_num) <= len(groups) && int(group_num) !=0 {
-			//	fmt.Println(time.Now().Format("Mon Jan _2 15:04:05 2006"),groups[group_num-1].Ip_current_level)
-			//}
+			str_group_num := string(group_num)
+			if strings.Contains(str_group_num, "stop") {
+				conn.Close()
+				break
+			}
+			re := regexp.MustCompile("[0-9]+")
+			strr := re.FindAllString(str_group_num, -1)
+			str_group_num = strings.Join(strr,"")
+			int_group_num, err := strconv.Atoi(str_group_num)
+			if err != nil {
+				conn.Close()
+				int_group_num = 0
+			}
+			if int_group_num <= len(groups) && int_group_num !=0 {
+				str_comand := fmt.Sprintf(time.Now().Format("Mon Jan _2 15:04:05 2006 "),groups[int_group_num-1].Ip_current_level)
+				str_comand_statistic := fmt.Sprintf(time.Now().Format("Mon Jan _2 15:04:05 2006 "),groups[int_group_num-1].Ip_result)
+				str_comand_results := fmt.Sprintf(time.Now().Format("Mon Jan _2 15:04:05 2006 "),groups[int_group_num-1].Ip_level_statistic)
+				conn.Write([]byte(str_comand + "\n"))
+				conn.Write([]byte(str_comand_statistic + "\n"))
+				conn.Write([]byte(str_comand_results + "\n"))
+			}
+			conn.Close()
 		}
 	}()
 	// так как каждая группа анализируется в потоке, цикл перехватывает возможные ошибки работы в потоках
